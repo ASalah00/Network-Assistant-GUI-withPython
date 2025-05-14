@@ -13,6 +13,29 @@ import re
 from openpyxl import Workbook
 from openpyxl.styles import Font
 
+# Utility function for IP address validation
+def get_ip_validator():
+    """Returns a QRegularExpressionValidator for IP address validation"""
+    ip_regex = QRegularExpression(
+        "^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+    )
+    return QRegularExpressionValidator(ip_regex)
+
+def validate_ip_address(ip_address):
+    """Validates if a string is a valid IP address
+    
+    Args:
+        ip_address (str): The IP address to validate
+        
+    Returns:
+        bool: True if valid, False otherwise
+    """
+    ip_regex = QRegularExpression(
+        "^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+    )
+    match = ip_regex.match(ip_address)
+    return match.hasMatch()
+
 class NetworkInventoryWorker(QThread):
     progress = pyqtSignal(str)
     finished = pyqtSignal(list)
@@ -301,6 +324,11 @@ class NetworkDocumenterWidget(QWidget):
         name_input.setPlaceholderText("Building Name")
         ip_input = QLineEdit()
         ip_input.setPlaceholderText("Distribution Switch IP")
+        
+        # Add IP address validation
+        ip_validator = get_ip_validator()
+        ip_input.setValidator(ip_validator)
+        
         row_layout.addWidget(QLabel("Name:"))
         row_layout.addWidget(name_input)
         row_layout.addWidget(QLabel("IP:"))
@@ -363,6 +391,12 @@ class NetworkDocumenterWidget(QWidget):
         if not building_inputs:
             QMessageBox.warning(self, "Error", "Please enter at least one building name and distribution switch IP")
             return
+        
+        # Validate all IP addresses
+        for building_name, ip in building_inputs:
+            if not validate_ip_address(ip):
+                QMessageBox.warning(self, "Error", f"Invalid IP address format for building '{building_name}': {ip}\nPlease use format: xxx.xxx.xxx.xxx")
+                return
         
         # Save credentials
         self.save_credentials()
@@ -797,6 +831,11 @@ class MacTrackerWidget(QWidget):
         dist_ip_layout.addWidget(QLabel("Distribution Switch IP:"))
         self.dist_ip_input = QLineEdit()
         self.dist_ip_input.setPlaceholderText("e.g., 10.1.1.1")
+        
+        # Add IP address validation
+        ip_validator = get_ip_validator()
+        self.dist_ip_input.setValidator(ip_validator)
+        
         dist_ip_layout.addWidget(self.dist_ip_input)
         search_layout.addLayout(dist_ip_layout)
         
@@ -909,6 +948,11 @@ class MacTrackerWidget(QWidget):
         
         if not dist_ip:
             QMessageBox.warning(self, "Error", "Please enter distribution switch IP")
+            return
+        
+        # Additional IP validation to ensure it's in correct format
+        if not validate_ip_address(dist_ip):
+            QMessageBox.warning(self, "Error", "Please enter a valid IP address in format: xxx.xxx.xxx.xxx")
             return
         
         # Validate MAC suffix
