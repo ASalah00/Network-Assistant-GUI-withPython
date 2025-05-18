@@ -327,7 +327,7 @@ class NetworkDocumenterWidget(QWidget):
         
         # Add IP address validation
         ip_validator = get_ip_validator()
-        ip_input.setValidator(ip_validator)
+        # ip_input.setValidator(ip_validator) # Remove live validation
         
         row_layout.addWidget(QLabel("Name:"))
         row_layout.addWidget(name_input)
@@ -598,7 +598,8 @@ class MacTrackerWorker(QThread):
                 commands = [
                     f"show mac address-table",     # Standard command on newer IOS versions
                     f"show mac-address-table",     # Alternative format with hyphen for older IOS versions
-                    f"show mac address-table dynamic"  # Explicitly shows only dynamic entries, sometimes needed on certain switches
+                    f"show mac address-table dynamic",  # Explicitly shows only dynamic entries, sometimes needed on certain switches
+                    f"show dot11 associations",
                 ]
                 
                 mac_lines = []
@@ -681,7 +682,8 @@ class MacTrackerWorker(QThread):
                             'hostname': hostname,
                             'ip': switch_ip,
                             'interface': interface,
-                            'mac_suffix': self.mac_suffix
+                            'mac_suffix': self.mac_suffix,
+                            'full_mac': self._extract_full_mac_from_line(mac_line)
                         }
                         self.result.emit(result)
                         found_result = True
@@ -698,6 +700,14 @@ class MacTrackerWorker(QThread):
             self.active_connection = None
             return False
             
+    def _extract_full_mac_from_line(self, mac_line):
+        """Helper method to extract full MAC address from a MAC table line"""
+        # Common MAC address formats: xxxx.xxxx.xxxx, xx:xx:xx:xx:xx:xx, xx-xx-xx-xx-xx-xx
+        mac_match = re.search(r'([0-9a-fA-F]{4}\.[0-9a-fA-F]{4}\.[0-9a-fA-F]{4}|[0-9a-fA-F]{2}(?:[:-][0-9a-fA-F]{2}){5})', mac_line)
+        if mac_match:
+            return mac_match.group(0).lower() # Return in lowercase for consistency
+        return "Not Found"
+
     def _extract_interface_from_mac_line(self, mac_line):
         """Helper method to extract interface from MAC table line"""
         interface = None
@@ -834,10 +844,13 @@ class MacTrackerWidget(QWidget):
         
         # Add IP address validation
         ip_validator = get_ip_validator()
-        self.dist_ip_input.setValidator(ip_validator)
+        # self.dist_ip_input.setValidator(ip_validator) # Remove live validation
         
         dist_ip_layout.addWidget(self.dist_ip_input)
         search_layout.addLayout(dist_ip_layout)
+        
+        # Set initial focus to the IP input field
+        self.dist_ip_input.setFocus()
         
         # MAC suffix input
         mac_suffix_layout = QHBoxLayout()
@@ -1008,8 +1021,8 @@ class MacTrackerWidget(QWidget):
 <h3>🎯 Device Found!</h3>
 <table>
   <tr>
-    <td><b>MAC Suffix:</b></td>
-    <td>xxxx.xxxx.{result['mac_suffix']}</td>
+    <td><b>MAC Address:</b></td>
+    <td>{result['full_mac']}</td>
   </tr>
   <tr>
     <td><b>Switch Name:</b></td>
