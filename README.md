@@ -4,7 +4,7 @@ Here's a breakdown of its capabilities and the information required to use it:
 ## Overall Purpose:
 The application provides a user-friendly interface to interact with Cisco network devices using the Netmiko library. It automates the process of discovering network topology and locating specific devices.
 Key Features:
-##Network Documenter:
+## Network Documenter:
 Task: Discovers Cisco switches connected in a network, starting from a specified distribution switch. It gathers information about each switch, including hostname, IP address, uplink connection, model number, serial number, and lists other detected neighbors.
 ### Capabilities:
 Recursively traverses the network via CDP neighbors.
