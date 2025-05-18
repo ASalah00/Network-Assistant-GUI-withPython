@@ -5,6 +5,7 @@ Here's a breakdown of its capabilities and the information required to use it:
 The application provides a user-friendly interface to interact with Cisco network devices using the Netmiko library. It automates the process of discovering network topology and locating specific devices.
 Key Features:
 ## Network Documenter:
+![Image](https://github.com/user-attachments/assets/e83ecf60-0eef-477a-b0f9-55fcff130505)
 Task: Discovers Cisco switches connected in a network, starting from a specified distribution switch. It gathers information about each switch, including hostname, IP address, uplink connection, model number, serial number, and lists other detected neighbors.
 ### Capabilities:
 Recursively traverses the network via CDP neighbors.
@@ -18,6 +19,7 @@ Password: The password required to log in to the network devices.
 Building Name(s): A descriptive name for each network segment or building you want to document.
 Distribution Switch IP(s): The IP address of the primary distribution switch for each building/segment where the discovery should start.
 ## MAC Tracker:
+![Image](https://github.com/user-attachments/assets/2dab29de-b875-4475-878b-e7265f39dc85)
 Task: Locates the network switch and specific interface to which a device with a given MAC address suffix is connected. It searches through the network by following trunk links based on MAC address table entries.
 ### Capabilities:
 Traces a MAC address through multiple network hops.
