@@ -48,8 +48,11 @@ class NetworkInventoryWorker(QThread):
         self.distribution_ip = distribution_ip
         self.device_type = "cisco_ios"
         self.discovered_switches = set()  # Track discovered switch IPs
+        self.discovered_aps = set()  # Track discovered APs
         self.results = []
         self._abort = False
+        self.switch_count = 0  # Counter for switches (excluding distribution)
+        self.ap_count = 0  # Counter for access points
 
     def abort(self):
         self._abort = True
@@ -60,6 +63,20 @@ class NetworkInventoryWorker(QThread):
             self.discover_network(self.distribution_ip, None)
             if self._abort:
                 self.progress.emit("❌ Discovery cancelled by user.")
+            # Add counts to the results
+            self.progress.emit(f"\n📊 Network Statistics:")
+            self.progress.emit(f"   Total Switches: {self.switch_count}")
+            self.progress.emit(f"   Total APs: {self.ap_count}")
+            
+            # Add statistics as the first item in results
+            self.results.insert(0, {
+                'name': "Network Statistics",
+                'ip': f"Total Switches: {self.switch_count}",
+                'uplink': f"Total APs: {self.ap_count}",
+                'model': "N/A",
+                'serial': "N/A",
+                'extra_neighbors': ["N/A"]
+            })
             self.finished.emit(self.results)
         except Exception as e:
             self.error.emit(str(e))
@@ -96,14 +113,24 @@ class NetworkInventoryWorker(QThread):
                 )
 
                 for device_id, neighbor_ip, local_intf, remote_intf in neighbors:
+                    # Check if it's an AP
+                    if self.is_ap_device(neighbor_ip):
+                        if neighbor_ip not in self.discovered_aps:
+                            self.discovered_aps.add(neighbor_ip)
+                            self.ap_count += 1
+                            self.progress.emit(f"📡 Found AP: {device_id} ({neighbor_ip})")
+                        continue
+                    
                     # Ignore CoreSW and GXP switches neighbors
                     if device_id.lower().startswith("core") or device_id.lower().startswith("gxp"):
                         continue
-                    # Skip if neighbor is an AP or already discovered
-                    if not self.is_ap_device(neighbor_ip) and neighbor_ip not in self.discovered_switches:
+                    
+                    # Skip if neighbor is already discovered
+                    if neighbor_ip not in self.discovered_switches:
                         if self._abort:
                             return
                         self.progress.emit(f"🔍 Found new neighbor: {device_id} ({neighbor_ip})")
+                        self.switch_count += 1  # Increment switch count for each new switch
                         self.discover_network(neighbor_ip, ip)
                         time.sleep(1)  # Small delay between connections
 
@@ -364,9 +391,37 @@ class NetworkDocumenterWidget(QWidget):
         
         table = self.building_tables[building_name]
         results = self.building_results.get(building_name, [])
+        
+        # Find the statistics row (first row)
+        stats = None
+        if results and results[0]['name'] == "Network Statistics":
+            stats = results.pop(0)
+        
+        # Set the row count (excluding the stats row)
         table.setRowCount(len(results))
         
-        for row, switch in enumerate(results):
+        # Add the statistics row at the top with a different background color
+        table.insertRow(0)
+        if stats:
+            stats_item = QTableWidgetItem("Network Statistics")
+            stats_item.setBackground(Qt.GlobalColor.lightGray)
+            table.setItem(0, 0, stats_item)
+            
+            switches_item = QTableWidgetItem(stats['ip'])
+            switches_item.setBackground(Qt.GlobalColor.lightGray)
+            table.setItem(0, 1, switches_item)
+            
+            aps_item = QTableWidgetItem(stats['uplink'])
+            aps_item.setBackground(Qt.GlobalColor.lightGray)
+            table.setItem(0, 2, aps_item)
+            
+            for col in range(3, 6):
+                na_item = QTableWidgetItem("N/A")
+                na_item.setBackground(Qt.GlobalColor.lightGray)
+                table.setItem(0, col, na_item)
+        
+        # Add the rest of the results
+        for row, switch in enumerate(results, 1):  # Start from row 1 to leave space for stats
             table.setItem(row, 0, QTableWidgetItem(switch['name']))
             table.setItem(row, 1, QTableWidgetItem(switch['ip']))
             table.setItem(row, 2, QTableWidgetItem(switch['uplink']))
