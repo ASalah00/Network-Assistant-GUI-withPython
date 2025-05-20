@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                            QHBoxLayout, QLabel, QLineEdit, QPushButton, 
                            QTextEdit, QProgressBar, QMessageBox, QTableWidget,
                            QTableWidgetItem, QFileDialog, QGroupBox, QTabWidget,
-                           QCheckBox)
+                           QCheckBox, QScrollArea)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QRegularExpression, QSettings
 from PyQt6.QtGui import QFont, QIcon, QRegularExpressionValidator
 import getpass
@@ -237,7 +237,8 @@ class NetworkDocumenterWidget(QWidget):
         # Settings for "Remember Me" feature
         self.settings = QSettings("NetworkTools", "NetworkDocumenter")
         
-        layout = QVBoxLayout(self)
+        # Main layout
+        main_layout = QVBoxLayout(self)
         
         # Create credential group
         credential_group = QGroupBox("Login Credentials")
@@ -263,11 +264,32 @@ class NetworkDocumenterWidget(QWidget):
         credential_layout.addWidget(self.remember_checkbox)
         
         credential_group.setLayout(credential_layout)
-        layout.addWidget(credential_group)
+        main_layout.addWidget(credential_group)
+        
+        # Create scroll area for buildings
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setMinimumHeight(150)  # Set minimum height for the scroll area
+        
+        # Create a widget to hold the buildings group
+        buildings_container = QWidget()
+        buildings_container_layout = QVBoxLayout(buildings_container)
         
         # Create buildings group
         self.buildings_group = QGroupBox("Buildings (Name + Distribution Switch IP)")
         self.buildings_layout = QVBoxLayout()
+        
+        # Add upload file button
+        upload_layout = QHBoxLayout()
+        upload_btn = QPushButton("Upload Buildings File")
+        upload_btn.clicked.connect(self.upload_buildings_file)
+        upload_help = QLabel("(Format: buildingname:buildingIP)")
+        upload_help.setStyleSheet("color: gray;")
+        upload_layout.addWidget(upload_btn)
+        upload_layout.addWidget(upload_help)
+        upload_layout.addStretch()
+        self.buildings_layout.addLayout(upload_layout)
+        
         self.building_rows = []
         self.add_building_row()  # Add initial row
         
@@ -278,16 +300,20 @@ class NetworkDocumenterWidget(QWidget):
         self.buildings_layout.addWidget(add_building_btn, alignment=Qt.AlignmentFlag.AlignLeft)
         
         self.buildings_group.setLayout(self.buildings_layout)
-        layout.addWidget(self.buildings_group)
+        buildings_container_layout.addWidget(self.buildings_group)
+        
+        # Set the buildings container as the scroll area's widget
+        scroll_area.setWidget(buildings_container)
+        main_layout.addWidget(scroll_area)
         
         # Create progress area
         self.progress_text = QTextEdit()
         self.progress_text.setReadOnly(True)
-        layout.addWidget(self.progress_text)
+        main_layout.addWidget(self.progress_text)
         
         # Create progress bar
         self.progress_bar = QProgressBar()
-        layout.addWidget(self.progress_bar)
+        main_layout.addWidget(self.progress_bar)
         
         # Create buttons
         button_layout = QHBoxLayout()
@@ -306,11 +332,11 @@ class NetworkDocumenterWidget(QWidget):
         self.export_button.setEnabled(False)
         button_layout.addWidget(self.export_button)
         
-        layout.addLayout(button_layout)
+        main_layout.addLayout(button_layout)
         
         # Create tab widget for results
         self.tab_widget = QTabWidget()
-        layout.addWidget(self.tab_widget)
+        main_layout.addWidget(self.tab_widget)
         
         self.results = []
         self.building_results = {}  # For multi-building
@@ -567,6 +593,92 @@ class NetworkDocumenterWidget(QWidget):
             QMessageBox.information(self, "Success", f"Inventory saved to '{file_name}'")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save Excel file: {str(e)}")
+
+    def upload_buildings_file(self):
+        """Handle uploading and parsing of buildings file"""
+        file_name, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Buildings File",
+            "",
+            "Text Files (*.txt);;All Files (*.*)"
+        )
+        
+        if not file_name:
+            return
+            
+        try:
+            with open(file_name, 'r') as file:
+                # Clear existing rows except the first one
+                while len(self.building_rows) > 1:
+                    row = self.building_rows.pop()
+                    self.buildings_layout.removeWidget(row[2])
+                    row[2].deleteLater()
+                
+                # Clear the first row's inputs
+                if self.building_rows:
+                    self.building_rows[0][0].clear()
+                    self.building_rows[0][1].clear()
+                
+                # Read and parse the file
+                for line in file:
+                    line = line.strip()
+                    if not line or line.startswith('#'):  # Skip empty lines and comments
+                        continue
+                        
+                    try:
+                        # Split by colon and strip whitespace
+                        building_name, ip = [part.strip() for part in line.split(':', 1)]
+                        
+                        if not building_name or not ip:
+                            continue
+                            
+                        # Validate IP address
+                        if not validate_ip_address(ip):
+                            QMessageBox.warning(
+                                self,
+                                "Invalid IP",
+                                f"Invalid IP address format for building '{building_name}': {ip}\nSkipping this entry."
+                            )
+                            continue
+                        
+                        # Add new row if needed
+                        if len(self.building_rows) == 0:
+                            self.add_building_row()
+                            
+                        # Fill the current row
+                        current_row = self.building_rows[-1]
+                        current_row[0].setText(building_name)
+                        current_row[1].setText(ip)
+                        
+                        # Add new row for next entry
+                        self.add_building_row()
+                        
+                    except ValueError:
+                        QMessageBox.warning(
+                            self,
+                            "Invalid Format",
+                            f"Invalid line format: {line}\nExpected format: buildingname:buildingIP"
+                        )
+                        continue
+                
+                # Remove the last empty row if we added entries
+                if len(self.building_rows) > 1:
+                    last_row = self.building_rows.pop()
+                    self.buildings_layout.removeWidget(last_row[2])
+                    last_row[2].deleteLater()
+                
+            QMessageBox.information(
+                self,
+                "Success",
+                "Buildings file uploaded successfully!"
+            )
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to read buildings file: {str(e)}"
+            )
 
 class MacTrackerWorker(QThread):
     progress = pyqtSignal(str)
